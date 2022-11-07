@@ -1,3 +1,40 @@
+# Changes on the fork:
+
+It adds a `build_dockspace` function which internally will setup a dock space for other imgui windows.
+
+It is based on a fork of imgui-rs, [`luke-titley/imgui-docking-rs`](https://github.com/luke-titley/imgui-docking-rs) but its updated to the latest version of `imgui-rs/*` and changes the API to use the new scratch buffer mechanism to managing window label strings.
+
+```rs
+let ui = imgui.frame();
+
+// This can be called at every frame
+ui.build_dockspace("RootDock", |dock| {
+    // specify the initial dockspace layout
+    // and which windows will be docked at which
+    // sections
+    dock.split(
+        imgui::Direction::Left,
+        0.5,
+        |left| {
+          left.dock_window("Window 1")
+        },
+        |right| {
+            right.split(
+                imgui::Direction::Up,
+                0.5,
+                |top| top.dock_window("Window 2"),
+                |bottom| bottom.dock_window("Window 3"),
+            )
+        },
+    )
+});
+
+// Then render the other windows as normal
+ui.window("Window 1").build(|| ui.text("Window 1"));
+ui.window("Window 2").build(|| ui.text("Window 2"));
+ui.window("Window 3").build(|| ui.text("Window 3"));
+```
+
 # imgui-rs: Rust bindings for Dear ImGui
 
 [![Build Status](https://github.com/imgui-rs/imgui-rs/workflows/ci/badge.svg)](https://github.com/imgui-rs/imgui-rs/actions)
