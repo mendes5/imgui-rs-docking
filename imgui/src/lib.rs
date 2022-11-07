@@ -958,3 +958,108 @@ pub enum Direction {
     Up = sys::ImGuiDir_Up,
     Down = sys::ImGuiDir_Down,
 }
+
+impl Ui {
+    pub fn build_dockspace<F: FnOnce(DockNode<'_>)>(&self, name: impl AsRef<str>, layout: F) {
+        unsafe {
+            let viewport = sys::igGetMainViewport();
+            sys::igSetNextWindowPos(
+                sys::ImVec2::from([0.0, 0.0]),
+                sys::ImGuiCond_Always as i32,
+                sys::ImVec2::from([0.0, 0.0]),
+            );
+            sys::igSetNextWindowSize((*viewport).Size, sys::ImGuiCond_Always as i32);
+            sys::igSetNextWindowViewport((*viewport).ID);
+            sys::igPushStyleVarFloat(sys::ImGuiStyleVar_WindowRounding as i32, 0.0);
+            sys::igPushStyleVarFloat(sys::ImGuiStyleVar_WindowBorderSize as i32, 0.0);
+
+            let window_flags = sys::ImGuiWindowFlags_NoDocking
+                | sys::ImGuiWindowFlags_NoTitleBar
+                | sys::ImGuiWindowFlags_NoCollapse
+                | sys::ImGuiWindowFlags_NoResize
+                | sys::ImGuiWindowFlags_NoMove
+                | sys::ImGuiWindowFlags_NoBringToFrontOnFocus
+                | sys::ImGuiWindowFlags_NoNavFocus
+                | sys::ImGuiWindowFlags_NoBackground;
+
+            let dockspace_flags =
+                sys::ImGuiDockNodeFlags_None | sys::ImGuiDockNodeFlags_PassthruCentralNode;
+
+            sys::igPushStyleVarVec2(
+                sys::ImGuiStyleVar_WindowPadding as i32,
+                sys::ImVec2::from([0.0, 0.0]),
+            );
+
+            let dockspace = self.scratch_txt(name);
+
+            let dockspace_id = sys::igGetIDStr(dockspace);
+
+            sys::igBegin(dockspace, &mut true, window_flags as i32);
+
+            sys::igPopStyleVar(3);
+
+            sys::igDockSpace(
+                dockspace_id,
+                sys::ImVec2::from([0.0, 0.0]),
+                dockspace_flags as i32,
+                sys::ImGuiWindowClass_ImGuiWindowClass(),
+            );
+
+            static mut FIRST_TIME: bool = true;
+
+            if FIRST_TIME {
+                FIRST_TIME = false;
+
+                sys::igDockBuilderRemoveNode(dockspace_id);
+                sys::igDockBuilderAddNode(
+                    dockspace_id,
+                    (dockspace_flags as i32) | sys::ImGuiDockNodeFlags_DockSpace,
+                );
+                sys::igDockBuilderSetNodeSize(dockspace_id, sys::ImVec2::from((*viewport).Size));
+
+                layout(DockNode::new(&self, dockspace_id));
+            }
+
+            sys::igEnd();
+        }
+    }
+}
+
+pub struct DockNode<'a> {
+    id: sys::ImGuiID,
+    ui: &'a Ui,
+}
+
+impl<'a> DockNode<'a> {
+    fn new(ui: &'a Ui, id: sys::ImGuiID) -> Self {
+        Self { id, ui }
+    }
+
+    pub fn split<D: FnOnce(DockNode<'_>), O: FnOnce(DockNode<'_>)>(
+        self,
+        split_dir: Direction,
+        size_ratio: f32,
+        dir: D,
+        opposite_dir: O,
+    ) {
+        let mut out_id_at_dir: sys::ImGuiID = 0;
+        let mut out_id_at_opposite_dir: sys::ImGuiID = 0;
+
+        unsafe {
+            sys::igDockBuilderSplitNode(
+                self.id,
+                split_dir as i32,
+                size_ratio,
+                &mut out_id_at_dir,
+                &mut out_id_at_opposite_dir,
+            );
+        }
+
+        dir(DockNode::new(self.ui, out_id_at_dir));
+        opposite_dir(DockNode::new(self.ui, out_id_at_opposite_dir));
+    }
+
+    pub fn dock_window(self, label: impl AsRef<str>)  {
+        unsafe { sys::igDockBuilderDockWindow(self.ui.scratch_txt(label), self.id) };
+    }
+}
